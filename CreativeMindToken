@@ -1,0 +1,1004 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity 0.8.14;
+
+interface IERC20 {
+	function totalSupply() external view returns (uint256);
+
+	function balanceOf(address account) external view returns (uint256);
+
+	function transfer(address recipient, uint256 amount)
+	external
+	returns (bool);
+
+	function allowance(address owner, address spender)
+	external
+	view
+	returns (uint256);
+
+	function approve(address spender, uint256 amount) external returns (bool);
+
+	function transferFrom(
+		address sender,
+		address recipient,
+		uint256 amount
+	) external returns (bool);
+
+	event Transfer(address indexed from, address indexed to, uint256 value);
+
+	event Approval(
+		address indexed owner,
+		address indexed spender,
+		uint256 value
+	);
+}
+
+interface IFactory {
+	function createPair(address tokenA, address tokenB)
+	external
+	returns (address pair);
+
+	function getPair(address tokenA, address tokenB)
+	external
+	view
+	returns (address pair);
+}
+
+interface IRouter {
+	function factory() external pure returns (address);
+
+	function WETH() external pure returns (address);
+
+	function addLiquidityETH(
+		address token,
+		uint256 amountTokenDesired,
+		uint256 amountTokenMin,
+		uint256 amountETHMin,
+		address to,
+		uint256 deadline
+	)
+	external
+	payable
+	returns (
+		uint256 amountToken,
+		uint256 amountETH,
+		uint256 liquidity
+	);
+
+	function swapExactETHForTokensSupportingFeeOnTransferTokens(
+		uint256 amountOutMin,
+		address[] calldata path,
+		address to,
+		uint256 deadline
+	) external payable;
+
+	function swapExactTokensForETHSupportingFeeOnTransferTokens(
+		uint256 amountIn,
+		uint256 amountOutMin,
+		address[] calldata path,
+		address to,
+		uint256 deadline
+	) external;
+}
+
+interface IERC20Metadata is IERC20 {
+	function name() external view returns (string memory);
+	function symbol() external view returns (string memory);
+	function decimals() external view returns (uint8);
+}
+
+library SafeMath {
+
+	function add(uint256 a, uint256 b) internal pure returns (uint256) {
+		uint256 c = a + b;
+		require(c >= a, "SafeMath: addition overflow");
+
+		return c;
+	}
+
+	function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+		return sub(a, b, "SafeMath: subtraction overflow");
+	}
+
+	function sub(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+		require(b <= a, errorMessage);
+		uint256 c = a - b;
+
+		return c;
+	}
+
+	function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+		// Gas optimization: this is cheaper than requiring 'a' not being zero, but the
+		// benefit is lost if 'b' is also tested.
+		// See: https://github.com/OpenZeppelin/openzeppelin-contracts/pull/522
+		if (a == 0) {
+			return 0;
+		}
+
+		uint256 c = a * b;
+		require(c / a == b, "SafeMath: multiplication overflow");
+
+		return c;
+	}
+
+	function div(uint256 a, uint256 b) internal pure returns (uint256) {
+		return div(a, b, "SafeMath: division by zero");
+	}
+
+	function div(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+		require(b > 0, errorMessage);
+		uint256 c = a / b;
+		// assert(a == b * c + a % b); // There is no case in which this doesn't hold
+
+		return c;
+	}
+
+	function mod(uint256 a, uint256 b) internal pure returns (uint256) {
+		return mod(a, b, "SafeMath: modulo by zero");
+	}
+
+	function mod(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+		require(b != 0, errorMessage);
+		return a % b;
+	}
+}
+
+abstract contract Context {
+	function _msgSender() internal view virtual returns (address) {
+		return msg.sender;
+	}
+
+	function _msgData() internal view virtual returns (bytes calldata) {
+		this; // silence state mutability warning without generating bytecode - see https://github.com/ethereum/solidity/issues/2691
+		return msg.data;
+	}
+}
+
+contract Ownable is Context {
+	address private _owner;
+
+	event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+	constructor () {
+		address msgSender = _msgSender();
+		_owner = msgSender;
+		emit OwnershipTransferred(address(0), msgSender);
+	}
+
+	function owner() public view returns (address) {
+		return _owner;
+	}
+
+	modifier onlyOwner() {
+		require(_owner == _msgSender(), "Ownable: caller is not the owner");
+		_;
+	}
+
+	function renounceOwnership() public virtual onlyOwner {
+		emit OwnershipTransferred(_owner, address(0));
+		_owner = address(0);
+	}
+
+	function transferOwnership(address newOwner) public virtual onlyOwner {
+		require(newOwner != address(0), "Ownable: new owner is the zero address");
+		emit OwnershipTransferred(_owner, newOwner);
+		_owner = newOwner;
+	}
+}
+
+contract ERC20 is Context, IERC20, IERC20Metadata {
+	using SafeMath for uint256;
+
+	mapping(address => uint256) private _balances;
+	mapping(address => mapping(address => uint256)) private _allowances;
+
+	uint256 private _totalSupply;
+	string private _name;
+	string private _symbol;
+
+	constructor(string memory name_, string memory symbol_) {
+		_name = name_;
+		_symbol = symbol_;
+	}
+
+	function name() public view virtual override returns (string memory) {
+		return _name;
+	}
+
+	function symbol() public view virtual override returns (string memory) {
+		return _symbol;
+	}
+
+	function decimals() public view virtual override returns (uint8) {
+		return 18;
+	}
+
+	function totalSupply() public view virtual override returns (uint256) {
+		return _totalSupply;
+	}
+
+	function balanceOf(address account) public view virtual override returns (uint256) {
+		return _balances[account];
+	}
+
+	function transfer(address recipient, uint256 amount) public virtual override returns (bool) {
+		_transfer(_msgSender(), recipient, amount);
+		return true;
+	}
+
+	function allowance(address owner, address spender) public view virtual override returns (uint256) {
+		return _allowances[owner][spender];
+	}
+
+	function approve(address spender, uint256 amount) public virtual override returns (bool) {
+		_approve(_msgSender(), spender, amount);
+		return true;
+	}
+
+	function transferFrom(
+		address sender,
+		address recipient,
+		uint256 amount
+	) public virtual override returns (bool) {
+		_transfer(sender, recipient, amount);
+		_approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "ERC20: transfer amount exceeds allowance"));
+		return true;
+	}
+
+	function increaseAllowance(address spender, uint256 addedValue) public virtual returns (bool) {
+		_approve(_msgSender(), spender, _allowances[_msgSender()][spender].add(addedValue));
+		return true;
+	}
+
+	function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
+		_approve(_msgSender(), spender, _allowances[_msgSender()][spender].sub(subtractedValue, "ERC20: decreased allowance below zero"));
+		return true;
+	}
+
+	function _transfer(
+		address sender,
+		address recipient,
+		uint256 amount
+	) internal virtual {
+		require(sender != address(0), "ERC20: transfer from the zero address");
+		require(recipient != address(0), "ERC20: transfer to the zero address");
+		_beforeTokenTransfer(sender, recipient, amount);
+		_balances[sender] = _balances[sender].sub(amount, "ERC20: transfer amount exceeds balance");
+		_balances[recipient] = _balances[recipient].add(amount);
+		emit Transfer(sender, recipient, amount);
+	}
+
+	function _mint(address account, uint256 amount) internal virtual {
+		require(account != address(0), "ERC20: mint to the zero address");
+		_beforeTokenTransfer(address(0), account, amount);
+		_totalSupply = _totalSupply.add(amount);
+		_balances[account] = _balances[account].add(amount);
+		emit Transfer(address(0), account, amount);
+	}
+
+	function _burn(address account, uint256 amount) internal virtual {
+		require(account != address(0), "ERC20: burn from the zero address");
+		_beforeTokenTransfer(account, address(0), amount);
+		_balances[account] = _balances[account].sub(amount, "ERC20: burn amount exceeds balance");
+		_totalSupply = _totalSupply.sub(amount);
+		emit Transfer(account, address(0), amount);
+	}
+
+	function _approve(
+		address owner,
+		address spender,
+		uint256 amount
+	) internal virtual {
+		require(owner != address(0), "ERC20: approve from the zero address");
+		require(spender != address(0), "ERC20: approve to the zero address");
+		_allowances[owner][spender] = amount;
+		emit Approval(owner, spender, amount);
+	}
+
+	function _beforeTokenTransfer(
+		address from,
+		address to,
+		uint256 amount
+	) internal virtual {}
+}
+
+contract CreativeMindToken is ERC20, Ownable {
+	IRouter public uniswapV2Router;
+	address public immutable uniswapV2Pair;
+
+	string private constant _name = "Creative Mind Token";
+	string private constant _symbol = "CMT";
+	uint8 private constant _decimals = 18;
+
+	bool public isTradingEnabled;
+	uint256 private _tradingPausedTimestamp;
+
+	// initialSupply
+	uint256 constant initialSupply = 25000000000 * (10**18);
+
+	// max wallet is 1.0% of initialSupply
+	uint256 public maxWalletAmount = initialSupply * 100 / 10000;
+
+	// max buy and sell tx is 2% of initialSupply
+    uint256 public maxTxAmount = initialSupply * 200 / 10000;
+
+	bool private _swapping;
+	uint256 public minimumTokensBeforeSwap = 25000000 * (10**18);
+
+    address public liquidityWallet;
+	address public marketingWallet;
+	address public salaryWallet;
+    address public devWallet;
+    address public rewardsWallet;
+    address public reserveWallet;
+
+    address public BUSD = 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56;
+
+	struct CustomTaxPeriod {
+		bytes23 periodName;
+		uint8 blocksInPeriod;
+		uint256 timeInPeriod;
+		uint8 liquidityFeeOnBuy;
+		uint8 liquidityFeeOnSell;
+		uint8 marketingFeeOnBuy;
+		uint8 marketingFeeOnSell;
+		uint8 salaryFeeOnBuy;
+		uint8 salaryFeeOnSell;
+        uint8 devFeeOnBuy;
+		uint8 devFeeOnSell;
+        uint8 rewardsFeeOnBuy;
+		uint8 rewardsFeeOnSell;
+        uint8 reserveFeeOnBuy;
+		uint8 reserveFeeOnSell;
+	}
+
+	// Launch taxes
+	bool private _isLaunched;
+	uint256 private _launchStartTimestamp;
+	uint256 private _launchBlockNumber;
+	CustomTaxPeriod private _launch1 = CustomTaxPeriod('launch1',5,0,100,2,0,2,0,2,0,1,0,3,0,2);
+	CustomTaxPeriod private _launch2 = CustomTaxPeriod('launch2',0,3600,1,4,2,8,2,4,1,2,2,8,1,4);
+	CustomTaxPeriod private _launch3 = CustomTaxPeriod('launch3',0,82800,1,1,2,7,2,4,1,2,2,7,1,4);
+
+	// Base taxes
+	CustomTaxPeriod private _default = CustomTaxPeriod('default',0,0,1,2,2,2,2,2,1,1,2,3,1,2);
+	CustomTaxPeriod private _base = CustomTaxPeriod('base',0,0,1,2,2,2,2,2,1,1,2,3,1,2);
+
+    // Rewards Hour taxes
+	uint256 private _rewardsHourStartTimestamp;
+	CustomTaxPeriod private _rewardsHour1 = CustomTaxPeriod('rewardsHour1',0,3600,0,4,0,8,0,4,0,2,3,8,0,4);
+	CustomTaxPeriod private _rewardsHour2 = CustomTaxPeriod('rewardsHour2',0,3600,1,1,2,7,2,4,1,2,2,7,1,4);
+
+	uint256 private constant _blockedTimeLimit = 172800;
+    bool private _feeOnWalletTranfers;
+	mapping (address => bool) private _isAllowedToTradeWhenDisabled;
+	mapping (address => bool) private _feeOnSelectedWalletTransfers;
+	mapping (address => bool) private _isExcludedFromFee;
+	mapping (address => bool) private _isExcludedFromMaxTransactionLimit;
+	mapping (address => bool) private _isExcludedFromMaxWalletLimit;
+	mapping (address => bool) private _isBlocked;
+	mapping (address => bool) public automatedMarketMakerPairs;
+	mapping (address => uint256) private _buyTimesInLaunch;
+
+	uint8 private _liquidityFee;
+	uint8 private _marketingFee;
+	uint8 private _salaryFee;
+	uint8 private _devFee;
+    uint8 private _rewardsFee;
+    uint8 private _reserveFee;
+	uint8 private _totalFee;
+
+	event AutomatedMarketMakerPairChange(address indexed pair, bool indexed value);
+	event UniswapV2RouterChange(address indexed newAddress, address indexed oldAddress);
+	event WalletChange(string indexed walletIdentifier, address indexed newWallet, address indexed oldWallet);
+	event FeeChange(string indexed identifier, uint8 liquidityFee, uint8 marketingFee, uint8 salaryFee, uint8 devFee, uint8 rewardsFee, uint8 reserveFee);
+	event CustomTaxPeriodChange(uint256 indexed newValue, uint256 indexed oldValue, string indexed taxType, bytes23 period);
+	event BlockedAccountChange(address indexed holder, bool indexed status);
+	event RewardsHourChange(bool indexed newValue, bool indexed oldValue);
+    event AllowedWhenTradingDisabledChange(address indexed account, bool isExcluded);
+    event MaxTransactionAmountChange(uint256 indexed newValue, uint256 indexed oldValue);
+	event MaxWalletAmountChange(uint256 indexed newValue, uint256 indexed oldValue);
+	event MinTokenAmountBeforeSwapChange(uint256 indexed newValue, uint256 indexed oldValue);
+    event ExcludeFromFeesChange(address indexed account, bool isExcluded);
+	event ExcludeFromMaxTransferChange(address indexed account, bool isExcluded);
+	event ExcludeFromMaxWalletChange(address indexed account, bool isExcluded);
+    event FeeOnWalletTransferChange(bool indexed newValue, bool indexed oldValue);
+	event FeeOnSelectedWalletTransfersChange(address indexed account, bool newValue);
+	event SwapAndLiquify(uint256 tokensSwapped, uint256 bnbReceived,uint256 tokensIntoLiqudity);
+    event ClaimBNBOverflow(uint256 amount);
+	event FeesApplied(uint8 liquidityFee, uint8 marketingFee, uint8 salaryFee, uint8 devFee, uint8 rewardsFee, uint8 reserveFee, uint8 totalFee);
+
+	constructor() ERC20(_name, _symbol) {
+        liquidityWallet = owner();
+        marketingWallet = owner();
+	    salaryWallet = owner();
+        devWallet = owner();
+        reserveWallet = owner();
+        rewardsWallet = owner();
+
+		IRouter _uniswapV2Router = IRouter(0x10ED43C718714eb63d5aA57B78B54704E256024E); // Mainnet
+		address _uniswapV2Pair = IFactory(_uniswapV2Router.factory()).createPair(
+			address(this),
+			_uniswapV2Router.WETH()
+		);
+		uniswapV2Router = _uniswapV2Router;
+		uniswapV2Pair = _uniswapV2Pair;
+		_setAutomatedMarketMakerPair(_uniswapV2Pair, true);
+
+		_isExcludedFromFee[owner()] = true;
+		_isExcludedFromFee[address(this)] = true;
+
+        _isAllowedToTradeWhenDisabled[owner()] = true;
+        _isAllowedToTradeWhenDisabled[address(this)] = true;
+
+		_isExcludedFromMaxTransactionLimit[address(this)] = true;
+
+		_isExcludedFromMaxWalletLimit[_uniswapV2Pair] = true;
+		_isExcludedFromMaxWalletLimit[address(uniswapV2Router)] = true;
+		_isExcludedFromMaxWalletLimit[address(this)] = true;
+		_isExcludedFromMaxWalletLimit[owner()] = true;
+
+		_mint(owner(), initialSupply);
+	}
+
+	receive() external payable {}
+
+	// Setters
+	function launch() external onlyOwner {
+		_launchStartTimestamp = block.timestamp;
+		_launchBlockNumber = block.number;
+		isTradingEnabled = true;
+		_isLaunched = true;
+	}
+	function cancelLaunch() external onlyOwner {
+		require(this.isInLaunch(), "Creative Mind Token: Launch is not set");
+		_launchStartTimestamp = 0;
+		_launchBlockNumber = 0;
+		_isLaunched = false;
+	}
+	function activateTrading() external onlyOwner {
+		isTradingEnabled = true;
+	}
+	function deactivateTrading() external onlyOwner {
+		isTradingEnabled = false;
+		_tradingPausedTimestamp = block.timestamp;
+	}
+	function setRewardsHour() external onlyOwner {
+		require(!this.isInRewardsHour(), "Creative Mind Token: Rewards Hour is already set");
+		require(isTradingEnabled, "Creative Mind Token: Trading must be enabled first");
+		require(!this.isInLaunch(), "Creative Mind Token: Must not be in launch period");
+		emit RewardsHourChange(true, false);
+		_rewardsHourStartTimestamp = block.timestamp;
+	}
+	function cancelRewardsHour() external onlyOwner {
+		require(this.isInRewardsHour(), "Creative Mind Token: Rewards Hour is not set");
+		emit RewardsHourChange(false, true);
+		_rewardsHourStartTimestamp = 0;
+	}
+	function _setAutomatedMarketMakerPair(address pair, bool value) private {
+		require(automatedMarketMakerPairs[pair] != value, "Creative Mind Token: Automated market maker pair is already set to that value");
+		automatedMarketMakerPairs[pair] = value;
+		emit AutomatedMarketMakerPairChange(pair, value);
+	}
+    function allowTradingWhenDisabled(address account, bool allowed) external onlyOwner {
+		_isAllowedToTradeWhenDisabled[account] = allowed;
+		emit AllowedWhenTradingDisabledChange(account, allowed);
+	}
+	function excludeFromFees(address account, bool excluded) external onlyOwner {
+		require(_isExcludedFromFee[account] != excluded, "Creative Mind Token: Account is already the value of 'excluded'");
+		_isExcludedFromFee[account] = excluded;
+		emit ExcludeFromFeesChange(account, excluded);
+	}
+	function excludeFromMaxTransactionLimit(address account, bool excluded) external onlyOwner {
+		require(_isExcludedFromMaxTransactionLimit[account] != excluded, "Creative Mind Token: Account is already the value of 'excluded'");
+		_isExcludedFromMaxTransactionLimit[account] = excluded;
+		emit ExcludeFromMaxTransferChange(account, excluded);
+	}
+	function excludeFromMaxWalletLimit(address account, bool excluded) external onlyOwner {
+		require(_isExcludedFromMaxWalletLimit[account] != excluded, "Creative Mind Token: Account is already the value of 'excluded'");
+		_isExcludedFromMaxWalletLimit[account] = excluded;
+		emit ExcludeFromMaxWalletChange(account, excluded);
+	}
+	function blockAccount(address account) external onlyOwner {
+		require(!_isBlocked[account], "Creative Mind Token: Account is already blocked");
+		if (_isLaunched) {
+			require((block.timestamp - _launchStartTimestamp) < _blockedTimeLimit, "Creative Mind Token: Time to block accounts has expired");
+		}
+		_isBlocked[account] = true;
+		emit BlockedAccountChange(account, true);
+	}
+	function unblockAccount(address account) external onlyOwner {
+		require(_isBlocked[account], "Creative Mind Token: Account is not blcoked");
+		_isBlocked[account] = false;
+		emit BlockedAccountChange(account, false);
+	}
+	function setWallets(address newLiquidityWallet, address newMarketingWallet, address newSalaryWallet, address newDevWallet, address newRewardsWallet, address newReserveWallet) external onlyOwner {
+		if(liquidityWallet != newLiquidityWallet) {
+			require(newLiquidityWallet != address(0), "Creative Mind Token: The liquidityWallet cannot be 0");
+			emit WalletChange('liquidityWallet', newLiquidityWallet, liquidityWallet);
+			liquidityWallet = newLiquidityWallet;
+		}
+		if(marketingWallet != newMarketingWallet) {
+			require(newMarketingWallet != address(0), "Creative Mind Token: The marketingWallet cannot be 0");
+			emit WalletChange('marketingWallet', newMarketingWallet, marketingWallet);
+			marketingWallet = newMarketingWallet;
+		}
+		if(salaryWallet != newSalaryWallet) {
+			require(newSalaryWallet != address(0), "Creative Mind Token: The salaryWallet cannot be 0");
+			emit WalletChange('salaryWallet', newSalaryWallet, salaryWallet);
+			salaryWallet = newSalaryWallet;
+		}
+        if(devWallet != newDevWallet) {
+			require(newDevWallet != address(0), "Creative Mind Token: The devWallet cannot be 0");
+			emit WalletChange('devWallet', newDevWallet, devWallet);
+			devWallet = newDevWallet;
+		}
+        if(rewardsWallet != newRewardsWallet) {
+			require(newRewardsWallet != address(0), "Creative Mind Token: The rewardsWallet cannot be 0");
+			emit WalletChange('rewardsWallet', newRewardsWallet, rewardsWallet);
+			rewardsWallet = newRewardsWallet;
+		}
+        if(reserveWallet != newReserveWallet) {
+			require(newReserveWallet != address(0), "Creative Mind Token: The reserveWallet cannot be 0");
+			emit WalletChange('reserveWallet', newReserveWallet, reserveWallet);
+			reserveWallet = newReserveWallet;
+		}
+	}
+    function setFeeOnWalletTransfers(bool value) external onlyOwner {
+		emit FeeOnWalletTransferChange(value, _feeOnWalletTranfers);
+		_feeOnWalletTranfers = value;
+	}
+	function setFeeOnSelectedWalletTransfers(address account, bool value) external onlyOwner {
+		require(_feeOnSelectedWalletTransfers[account] != value, "Creative Mind Token: The selected wallet is already set to the value ");
+		_feeOnSelectedWalletTransfers[account] = value;
+		emit FeeOnSelectedWalletTransfersChange(account, value);
+	}
+    function setAllFeesToZero() external onlyOwner {
+        _setCustomBuyTaxPeriod(_base, 0, 0, 0, 0, 0, 0);
+        emit FeeChange('baseFees-Buy', 0, 0, 0, 0, 0, 0);
+        _setCustomSellTaxPeriod(_base, 0, 0, 0, 0, 0, 0);
+        emit FeeChange('baseFees-Sell', 0, 0, 0, 0, 0, 0);
+    }
+    function resetAllFees() external onlyOwner {
+        _setCustomBuyTaxPeriod(_base, _default.liquidityFeeOnBuy, _default.marketingFeeOnBuy, _default.salaryFeeOnBuy, _default.devFeeOnBuy, _default.rewardsFeeOnBuy, _default.reserveFeeOnBuy);
+        emit FeeChange('baseFees-Buy', _default.liquidityFeeOnBuy, _default.marketingFeeOnBuy, _default.salaryFeeOnBuy, _default.devFeeOnBuy, _default.rewardsFeeOnBuy, _default.reserveFeeOnBuy);
+        _setCustomSellTaxPeriod(_base, _default.liquidityFeeOnSell, _default.marketingFeeOnSell, _default.salaryFeeOnSell, _default.devFeeOnSell, _default.rewardsFeeOnSell, _default.reserveFeeOnSell);
+        emit FeeChange('baseFees-Sell', _default.liquidityFeeOnSell, _default.marketingFeeOnSell, _default.salaryFeeOnSell, _default.devFeeOnSell, _default.rewardsFeeOnSell, _default.reserveFeeOnSell);
+    }
+	// Base Fees
+	function setBaseFeesOnBuy(uint8 _liquidityFeeOnBuy, uint8 _marketingFeeOnBuy, uint8 _salaryFeeOnBuy, uint8 _devFeeOnBuy, uint8 _rewardsFeeOnBuy, uint8 _reserveFeeOnBuy) external onlyOwner {
+		_setCustomBuyTaxPeriod(_base, _liquidityFeeOnBuy, _marketingFeeOnBuy, _salaryFeeOnBuy, _devFeeOnBuy, _rewardsFeeOnBuy, _reserveFeeOnBuy);
+		emit FeeChange('baseFees-Buy', _liquidityFeeOnBuy, _marketingFeeOnBuy, _salaryFeeOnBuy, _devFeeOnBuy, _rewardsFeeOnBuy, _reserveFeeOnBuy);
+	}
+	function setBaseFeesOnSell(uint8 _liquidityFeeOnSell,uint8 _marketingFeeOnSell, uint8 _salaryFeeOnSell, uint8 _devFeeOnSell, uint8 _rewardsFeeOnSell, uint8 _reserveFeeOnSell) external onlyOwner {
+		_setCustomSellTaxPeriod(_base, _liquidityFeeOnSell, _marketingFeeOnSell, _salaryFeeOnSell, _devFeeOnSell, _rewardsFeeOnSell, _reserveFeeOnSell);
+		emit FeeChange('baseFees-Sell', _liquidityFeeOnSell, _marketingFeeOnSell, _salaryFeeOnSell, _devFeeOnSell, _rewardsFeeOnSell, _reserveFeeOnSell);
+	}
+	// Rewards 1 Hour Fees
+	function setRewardsHour1BuyFees(uint8 _liquidityFeeOnBuy,uint8 _marketingFeeOnBuy, uint8 _salaryFeeOnBuy, uint8 _devFeeOnBuy, uint8 _rewardsFeeOnBuy, uint8 _reserveFeeOnBuy) external onlyOwner {
+		_setCustomBuyTaxPeriod(_rewardsHour1, _liquidityFeeOnBuy, _marketingFeeOnBuy, _salaryFeeOnBuy, _devFeeOnBuy, _rewardsFeeOnBuy, _reserveFeeOnBuy);
+		emit FeeChange('rewardsHour1Fees-Buy', _liquidityFeeOnBuy, _marketingFeeOnBuy, _salaryFeeOnBuy, _devFeeOnBuy, _rewardsFeeOnBuy, _reserveFeeOnBuy);
+	}
+	function setRewardsHour1SellFees(uint8 _liquidityFeeOnSell,uint8 _marketingFeeOnSell, uint8 _salaryFeeOnSell, uint8 _devFeeOnSell, uint8 _rewardsFeeOnSell, uint8 _reserveFeeOnSell) external onlyOwner {
+		_setCustomSellTaxPeriod(_rewardsHour1, _liquidityFeeOnSell, _marketingFeeOnSell, _salaryFeeOnSell, _devFeeOnSell, _rewardsFeeOnSell, _reserveFeeOnSell);
+		emit FeeChange('rewardsHour1Fees-Sell', _liquidityFeeOnSell, _marketingFeeOnSell, _salaryFeeOnSell, _devFeeOnSell, _rewardsFeeOnSell, _reserveFeeOnSell);
+	}
+	// Rewards 2 Hour Fees
+	function setRewardsHour2BuyFees(uint8 _liquidityFeeOnBuy,uint8 _marketingFeeOnBuy, uint8 _salaryFeeOnBuy, uint8 _devFeeOnBuy, uint8 _rewardsFeeOnBuy, uint8 _reserveFeeOnBuy) external onlyOwner {
+		_setCustomBuyTaxPeriod(_rewardsHour2, _liquidityFeeOnBuy, _marketingFeeOnBuy, _salaryFeeOnBuy, _devFeeOnBuy, _rewardsFeeOnBuy, _reserveFeeOnBuy);
+		emit FeeChange('rewardsHour2Fees-Buy', _liquidityFeeOnBuy, _marketingFeeOnBuy, _salaryFeeOnBuy, _devFeeOnBuy, _rewardsFeeOnBuy, _reserveFeeOnBuy);
+	}
+	function setRewardsHour2SellFees(uint8 _liquidityFeeOnSell,uint8 _marketingFeeOnSell, uint8 _salaryFeeOnSell, uint8 _devFeeOnSell, uint8 _rewardsFeeOnSell, uint8 _reserveFeeOnSell) external onlyOwner {
+		_setCustomSellTaxPeriod(_rewardsHour2, _liquidityFeeOnSell, _marketingFeeOnSell, _salaryFeeOnSell, _devFeeOnSell, _rewardsFeeOnSell, _reserveFeeOnSell);
+		emit FeeChange('rewardsHour2Fees-Sell', _liquidityFeeOnSell, _marketingFeeOnSell, _salaryFeeOnSell, _devFeeOnSell, _rewardsFeeOnSell, _reserveFeeOnSell);
+	}
+	function setUniswapRouter(address newAddress) external onlyOwner {
+		require(newAddress != address(uniswapV2Router), "Creative Mind Token: The router already has that address");
+		emit UniswapV2RouterChange(newAddress, address(uniswapV2Router));
+		uniswapV2Router = IRouter(newAddress);
+	}
+	function setMaxTransactionAmount(uint256 newValue) external onlyOwner {
+        require(newValue != maxTxAmount, "Creative Mind Token: Cannot update maxTxAmount to same value");
+        emit MaxTransactionAmountChange(newValue, maxTxAmount);
+        maxTxAmount = newValue;
+	}
+	function setMaxWalletAmount(uint256 newValue) external onlyOwner {
+		require(newValue != maxWalletAmount, "Creative Mind Token: Cannot update maxWalletAmount to same value");
+		emit MaxWalletAmountChange(newValue, maxWalletAmount);
+		maxWalletAmount = newValue;
+	}
+	function setMinimumTokensBeforeSwap(uint256 newValue) external onlyOwner {
+		require(newValue != minimumTokensBeforeSwap, "Creative Mind Token: Cannot update minimumTokensBeforeSwap to same value");
+		emit MinTokenAmountBeforeSwapChange(newValue, minimumTokensBeforeSwap);
+		minimumTokensBeforeSwap = newValue;
+	}
+	function claimBNBOverflow() external onlyOwner {
+	    uint256 amount = address(this).balance;
+        (bool success,) = address(owner()).call{value : amount}("");
+        if (success){
+            emit ClaimBNBOverflow(amount);
+        }
+	}
+
+	// Getters
+	function isInRewardsHour() external view returns (bool) {
+		uint256 currentTimestamp = !isTradingEnabled && _tradingPausedTimestamp > _rewardsHourStartTimestamp  ? _tradingPausedTimestamp : block.timestamp;
+		uint256 totalRewardsHourTime = _rewardsHour1.timeInPeriod + _rewardsHour2.timeInPeriod;
+		uint256 timeSinceRewardsHour = currentTimestamp - _rewardsHourStartTimestamp;
+		if(timeSinceRewardsHour < totalRewardsHourTime) {
+			return true;
+		} else {
+			return false;
+		}
+	}
+	function isInLaunch() external view returns (bool) {
+		uint256 currentTimestamp = !isTradingEnabled && _tradingPausedTimestamp > _launchStartTimestamp  ? _tradingPausedTimestamp : block.timestamp;
+		uint256 timeSinceLaunch = currentTimestamp - _launchStartTimestamp;
+		uint256 blocksSinceLaunch = block.number - _launchBlockNumber;
+		uint256 totalLaunchTime =  _launch1.timeInPeriod + _launch2.timeInPeriod + _launch3.timeInPeriod;
+
+		if(_isLaunched && (timeSinceLaunch < totalLaunchTime || blocksSinceLaunch < _launch1.blocksInPeriod )) {
+			return true;
+		} else {
+			return false;
+		}
+	}
+	function getBaseBuyFees() external view returns (uint8, uint8, uint8, uint8, uint8, uint8){
+		return (_base.liquidityFeeOnBuy, _base.marketingFeeOnBuy, _base.salaryFeeOnBuy, _base.devFeeOnBuy, _base.rewardsFeeOnBuy, _base.reserveFeeOnBuy);
+	}
+	function getBaseSellFees() external view returns (uint8, uint8, uint8, uint8, uint8, uint8){
+		return (_base.liquidityFeeOnSell, _base.marketingFeeOnSell, _base.salaryFeeOnSell, _base.devFeeOnSell, _base.rewardsFeeOnBuy, _base.reserveFeeOnBuy);
+	}
+	function getRewardsHour1BuyFees() external view returns (uint8, uint8, uint8, uint8, uint8, uint8){
+		return (_rewardsHour1.liquidityFeeOnBuy, _rewardsHour1.marketingFeeOnBuy, _rewardsHour1.salaryFeeOnBuy, _rewardsHour1.devFeeOnBuy, _rewardsHour1.rewardsFeeOnBuy, _rewardsHour1.reserveFeeOnBuy);
+	}
+	function getRewardsHour1SellFees() external view returns (uint8, uint8, uint8, uint8, uint8, uint8){
+		return (_rewardsHour1.liquidityFeeOnSell, _rewardsHour1.marketingFeeOnSell, _rewardsHour1.salaryFeeOnSell, _rewardsHour1.devFeeOnSell, _rewardsHour1.rewardsFeeOnSell, _rewardsHour1.reserveFeeOnSell);
+	}
+	function getRewardsHour2BuyFees() external view returns (uint8, uint8, uint8, uint8, uint8, uint8){
+		return (_rewardsHour2.liquidityFeeOnBuy, _rewardsHour2.marketingFeeOnBuy, _rewardsHour2.salaryFeeOnBuy, _rewardsHour2.devFeeOnBuy, _rewardsHour2.rewardsFeeOnBuy, _rewardsHour2.reserveFeeOnBuy);
+	}
+	function getRewardsHour2SellFees() external view returns (uint8, uint8, uint8, uint8, uint8, uint8){
+		return (_rewardsHour2.liquidityFeeOnSell, _rewardsHour2.marketingFeeOnSell, _rewardsHour2.salaryFeeOnSell, _rewardsHour2.devFeeOnSell, _rewardsHour2.rewardsFeeOnSell, _rewardsHour2.reserveFeeOnSell);
+	}
+
+	// Main
+	function _transfer(
+		address from,
+		address to,
+		uint256 amount
+		) internal override {
+        require(from != address(0), "ERC20: transfer from the zero address");
+        require(to != address(0), "ERC20: transfer to the zero address");
+
+        if(amount == 0) {
+            super._transfer(from, to, 0);
+            return;
+        }
+
+        bool isBuyFromLp = automatedMarketMakerPairs[from];
+        bool isSelltoLp = automatedMarketMakerPairs[to];
+        bool _isInLaunch = this.isInLaunch();
+        uint256 currentTimestamp = !isTradingEnabled && _tradingPausedTimestamp > _launchStartTimestamp  ? _tradingPausedTimestamp : block.timestamp;
+
+        if(!_isAllowedToTradeWhenDisabled[from] && !_isAllowedToTradeWhenDisabled[to]) {
+            require(isTradingEnabled, "Creative Mind Token: Trading is currently disabled.");
+            require(!_isBlocked[to], "Creative Mind Token: Account is blocked");
+            require(!_isBlocked[from], "Creative Mind Token: Account is blocked");
+            if (_isInLaunch && (currentTimestamp - _launchStartTimestamp) <= 300 && isBuyFromLp) {
+                require((currentTimestamp - _buyTimesInLaunch[to]) > 60, "Creative Mind Token: Cannot buy more than once per min in first 5min of launch");
+            }
+            if (!_isExcludedFromMaxTransactionLimit[to] && !_isExcludedFromMaxTransactionLimit[from]) {
+                require(amount <= maxTxAmount, "Creative Mind Token: Amount exceeds the maxTxAmount.");
+            }
+            if (!_isExcludedFromMaxWalletLimit[to]) {
+                require((balanceOf(to) + amount) <= maxWalletAmount, "Creative Mind Token: Expected wallet amount exceeds the maxWalletAmount.");
+            }
+        }
+
+        _adjustTaxes(isBuyFromLp, isSelltoLp, _isInLaunch, to, from);
+        bool canSwap = balanceOf(address(this)) >= minimumTokensBeforeSwap;
+
+        if (
+            isTradingEnabled &&
+            canSwap &&
+            !_swapping &&
+            _totalFee > 0 &&
+            automatedMarketMakerPairs[to]
+        ) {
+            _swapping = true;
+            _swapAndLiquify();
+            _swapping = false;
+        }
+
+        bool takeFee = !_swapping && isTradingEnabled;
+
+        if(_isExcludedFromFee[from] || _isExcludedFromFee[to]){
+            takeFee = false;
+        }
+        if (takeFee && _totalFee > 0) {
+            uint256 fee = amount * _totalFee / 100;
+            amount = amount - fee;
+            super._transfer(from, address(this), fee);
+        }
+
+        if (_isInLaunch && (currentTimestamp - _launchStartTimestamp) <= 300) {
+            if (to != owner() && isBuyFromLp  && (currentTimestamp - _buyTimesInLaunch[to]) > 60) {
+                _buyTimesInLaunch[to] = currentTimestamp;
+            }
+        }
+
+        super._transfer(from, to, amount);
+	}
+	function _adjustTaxes(bool isBuyFromLp, bool isSelltoLp, bool isLaunching, address to, address from) private {
+		uint256 blocksSinceLaunch = block.number - _launchBlockNumber;
+		uint256 currentTimestamp = !isTradingEnabled && _tradingPausedTimestamp > _launchStartTimestamp  ? _tradingPausedTimestamp : block.timestamp;
+		uint256 timeSinceLaunch = currentTimestamp - _launchStartTimestamp;
+		uint256 timeSinceRewardsHour = currentTimestamp - _rewardsHourStartTimestamp;
+		_liquidityFee = 0;
+		_marketingFee = 0;
+        _salaryFee = 0;
+		_devFee = 0;
+        _rewardsFee = 0;
+        _reserveFee = 0;
+
+		if (isBuyFromLp) {
+		    _liquidityFee = _base.liquidityFeeOnBuy;
+			_marketingFee = _base.marketingFeeOnBuy;
+			_salaryFee = _base.salaryFeeOnBuy;
+			_devFee = _base.devFeeOnBuy;
+            _rewardsFee = _base.rewardsFeeOnBuy;
+            _reserveFee = _base.reserveFeeOnBuy;
+
+			if (isLaunching) {
+				if (_isLaunched && blocksSinceLaunch < _launch1.blocksInPeriod) {
+					_liquidityFee = _launch1.liquidityFeeOnBuy;
+					_marketingFee = _launch1.marketingFeeOnBuy;
+                    _salaryFee = _launch1.salaryFeeOnBuy;
+					_devFee = _launch1.devFeeOnBuy;
+                    _rewardsFee = _launch1.rewardsFeeOnBuy;
+                    _reserveFee = _launch1.reserveFeeOnBuy;
+				}
+				else if (_isLaunched && timeSinceLaunch <= _launch2.timeInPeriod && blocksSinceLaunch > _launch1.blocksInPeriod) {
+					_liquidityFee = _launch2.liquidityFeeOnBuy;
+					_marketingFee = _launch2.marketingFeeOnBuy;
+                    _salaryFee = _launch2.salaryFeeOnBuy;
+					_devFee = _launch2.devFeeOnBuy;
+                    _rewardsFee = _launch2.rewardsFeeOnBuy;
+                    _reserveFee = _launch2.reserveFeeOnBuy;
+				}
+				else {
+					_liquidityFee = _launch3.liquidityFeeOnBuy;
+					_marketingFee = _launch3.marketingFeeOnBuy;
+                    _salaryFee = _launch3.salaryFeeOnBuy;
+					_devFee = _launch3.devFeeOnBuy;
+                    _rewardsFee = _launch3.rewardsFeeOnBuy;
+                    _reserveFee = _launch3.reserveFeeOnBuy;
+				}
+			}
+			else if (timeSinceRewardsHour <= _rewardsHour1.timeInPeriod) {
+				_liquidityFee = _rewardsHour1.liquidityFeeOnBuy;
+				_marketingFee = _rewardsHour1.marketingFeeOnBuy;
+                _salaryFee = _rewardsHour1.salaryFeeOnBuy;
+				_devFee = _rewardsHour1.devFeeOnBuy;
+                _rewardsFee = _rewardsHour1.rewardsFeeOnBuy;
+                _reserveFee = _rewardsHour1.reserveFeeOnBuy;
+			}
+			else if (timeSinceRewardsHour > _rewardsHour1.timeInPeriod && timeSinceRewardsHour <= (_rewardsHour1.timeInPeriod + _rewardsHour2.timeInPeriod)) {
+				_liquidityFee = _rewardsHour2.liquidityFeeOnBuy;
+				_marketingFee = _rewardsHour2.marketingFeeOnBuy;
+                _salaryFee = _rewardsHour2.salaryFeeOnBuy;
+				_devFee = _rewardsHour2.devFeeOnBuy;
+                _rewardsFee = _rewardsHour2.rewardsFeeOnBuy;
+                _reserveFee = _rewardsHour2.reserveFeeOnBuy;
+			}
+		}
+	    if (isSelltoLp) {
+	    	_liquidityFee = _base.liquidityFeeOnSell;
+			_marketingFee = _base.marketingFeeOnSell;
+            _salaryFee = _base.salaryFeeOnSell;
+			_devFee = _base.devFeeOnSell;
+            _rewardsFee = _base.rewardsFeeOnSell;
+            _reserveFee = _base.reserveFeeOnSell;
+
+			if (isLaunching) {
+				if (_isLaunched && blocksSinceLaunch < _launch1.blocksInPeriod) {
+					_liquidityFee = _launch1.liquidityFeeOnSell;
+					_marketingFee = _launch1.marketingFeeOnSell;
+                    _salaryFee = _launch1.salaryFeeOnSell;
+					_devFee = _launch1.devFeeOnSell;
+                    _rewardsFee = _launch1.rewardsFeeOnSell;
+                    _reserveFee = _launch1.reserveFeeOnSell;
+				}
+				else if (_isLaunched && timeSinceLaunch <= _launch2.timeInPeriod && blocksSinceLaunch > _launch1.blocksInPeriod) {
+					_liquidityFee = _launch2.liquidityFeeOnSell;
+					_marketingFee = _launch2.marketingFeeOnSell;
+                    _salaryFee = _launch2.salaryFeeOnSell;
+					_devFee = _launch2.devFeeOnSell;
+                    _rewardsFee = _launch2.rewardsFeeOnSell;
+                    _reserveFee = _launch2.reserveFeeOnSell;
+				}
+				else {
+					_liquidityFee = _launch3.liquidityFeeOnSell;
+					_marketingFee = _launch3.marketingFeeOnSell;
+                    _salaryFee = _launch3.salaryFeeOnSell;
+					_devFee = _launch3.devFeeOnSell;
+                    _rewardsFee = _launch3.rewardsFeeOnSell;
+                    _reserveFee = _launch3.reserveFeeOnSell;
+				}
+			}
+			else if (timeSinceRewardsHour <= _rewardsHour1.timeInPeriod) {
+				_liquidityFee = _rewardsHour1.liquidityFeeOnSell;
+				_marketingFee = _rewardsHour1.marketingFeeOnSell;
+                _salaryFee = _rewardsHour1.salaryFeeOnSell;
+				_devFee = _rewardsHour1.devFeeOnSell;
+                _rewardsFee = _rewardsHour1.rewardsFeeOnSell;
+                _reserveFee = _rewardsHour1.reserveFeeOnSell;
+			}
+			else if (timeSinceRewardsHour > _rewardsHour1.timeInPeriod && timeSinceRewardsHour <= (_rewardsHour1.timeInPeriod + _rewardsHour2.timeInPeriod)) {
+				_liquidityFee = _rewardsHour2.liquidityFeeOnSell;
+				_marketingFee = _rewardsHour2.marketingFeeOnSell;
+                _salaryFee = _rewardsHour2.salaryFeeOnSell;
+				_devFee = _rewardsHour2.devFeeOnSell;
+                _rewardsFee = _rewardsHour2.rewardsFeeOnSell;
+                _reserveFee = _rewardsHour2.reserveFeeOnSell;
+			}
+		}
+		if (!isSelltoLp && !isBuyFromLp && (_feeOnSelectedWalletTransfers[from] || _feeOnSelectedWalletTransfers[to])) {
+			_liquidityFee = _base.liquidityFeeOnSell;
+			_marketingFee = _base.marketingFeeOnSell;
+            _salaryFee = _base.salaryFeeOnSell;
+			_devFee = _base.devFeeOnSell;
+            _rewardsFee = _base.rewardsFeeOnSell;
+            _reserveFee = _base.reserveFeeOnSell;
+		}
+		else if (!isSelltoLp && !isBuyFromLp && !_feeOnSelectedWalletTransfers[from] && !_feeOnSelectedWalletTransfers[to] && _feeOnWalletTranfers) {
+			_liquidityFee = _base.liquidityFeeOnBuy;
+			_marketingFee = _base.marketingFeeOnBuy;
+            _salaryFee = _base.salaryFeeOnBuy;
+			_devFee = _base.devFeeOnBuy;
+            _rewardsFee = _base.rewardsFeeOnBuy;
+            _reserveFee = _base.reserveFeeOnBuy;
+		}
+		_totalFee = _liquidityFee + _marketingFee + _salaryFee + _devFee + _rewardsFee + _reserveFee;
+		emit FeesApplied(_liquidityFee, _marketingFee, _salaryFee, _devFee, _rewardsFee, _reserveFee, _totalFee);
+	}
+	function _setCustomSellTaxPeriod(CustomTaxPeriod storage map,
+		uint8 _liquidityFeeOnSell,
+		uint8 _marketingFeeOnSell,
+        uint8 _salaryFeeOnSell,
+		uint8 _devFeeOnSell,
+        uint8 _rewardsFeeOnSell,
+        uint8 _reserveFeeOnSell
+	) private {
+		if (map.liquidityFeeOnSell != _liquidityFeeOnSell) {
+			emit CustomTaxPeriodChange(_liquidityFeeOnSell, map.liquidityFeeOnSell, 'liquidityFeeOnSell', map.periodName);
+			map.liquidityFeeOnSell = _liquidityFeeOnSell;
+		}
+		if (map.marketingFeeOnSell != _marketingFeeOnSell) {
+			emit CustomTaxPeriodChange(_marketingFeeOnSell, map.marketingFeeOnSell, 'marketingFeeOnSell', map.periodName);
+			map.marketingFeeOnSell = _marketingFeeOnSell;
+		}
+        if (map.salaryFeeOnSell != _salaryFeeOnSell) {
+			emit CustomTaxPeriodChange(_salaryFeeOnSell, map.salaryFeeOnSell, 'salaryFeeOnSell', map.periodName);
+			map.salaryFeeOnSell = _salaryFeeOnSell;
+		}
+		if (map.devFeeOnSell != _devFeeOnSell) {
+			emit CustomTaxPeriodChange(_devFeeOnSell, map.devFeeOnSell, 'devFeeOnSell', map.periodName);
+			map.devFeeOnSell = _devFeeOnSell;
+		}
+        if (map.rewardsFeeOnSell != _rewardsFeeOnSell) {
+			emit CustomTaxPeriodChange(_rewardsFeeOnSell, map.rewardsFeeOnSell, 'rewardsFeeOnSell', map.periodName);
+			map.rewardsFeeOnSell = _rewardsFeeOnSell;
+		}
+        if (map.reserveFeeOnSell != _reserveFeeOnSell) {
+			emit CustomTaxPeriodChange(_reserveFeeOnSell, map.reserveFeeOnSell, 'reserveFeeOnSell', map.periodName);
+			map.reserveFeeOnSell = _reserveFeeOnSell;
+		}
+	}
+	function _setCustomBuyTaxPeriod(CustomTaxPeriod storage map,
+		uint8 _liquidityFeeOnBuy,
+		uint8 _marketingFeeOnBuy,
+        uint8 _salaryFeeOnBuy,
+		uint8 _devFeeOnBuy,
+        uint8 _rewardsFeeOnBuy,
+        uint8 _reserveFeeOnBuy
+		) private {
+		if (map.liquidityFeeOnBuy != _liquidityFeeOnBuy) {
+			emit CustomTaxPeriodChange(_liquidityFeeOnBuy, map.liquidityFeeOnBuy, 'liquidityFeeOnBuy', map.periodName);
+			map.liquidityFeeOnBuy = _liquidityFeeOnBuy;
+		}
+		if (map.marketingFeeOnBuy != _marketingFeeOnBuy) {
+			emit CustomTaxPeriodChange(_marketingFeeOnBuy, map.marketingFeeOnBuy, 'marketingFeeOnBuy', map.periodName);
+			map.marketingFeeOnBuy = _marketingFeeOnBuy;
+		}
+		if (map.salaryFeeOnBuy != _salaryFeeOnBuy) {
+			emit CustomTaxPeriodChange(_salaryFeeOnBuy, map.salaryFeeOnBuy, 'salaryFeeOnBuy', map.periodName);
+			map.salaryFeeOnBuy = _salaryFeeOnBuy;
+		}
+		if (map.devFeeOnBuy != _devFeeOnBuy) {
+			emit CustomTaxPeriodChange(_devFeeOnBuy, map.devFeeOnBuy, 'devFeeOnBuy', map.periodName);
+			map.devFeeOnBuy = _devFeeOnBuy;
+		}
+        if (map.rewardsFeeOnBuy != _rewardsFeeOnBuy) {
+			emit CustomTaxPeriodChange(_rewardsFeeOnBuy, map.rewardsFeeOnBuy, 'rewardsFeeOnBuy', map.periodName);
+			map.rewardsFeeOnBuy = _rewardsFeeOnBuy;
+		}
+        if (map.reserveFeeOnBuy != _reserveFeeOnBuy) {
+			emit CustomTaxPeriodChange(_reserveFeeOnBuy, map.reserveFeeOnBuy, 'reserveFeeOnBuy', map.periodName);
+			map.reserveFeeOnBuy = _reserveFeeOnBuy;
+		}
+	}
+	function _swapAndLiquify() private {
+		uint256 contractBalance = balanceOf(address(this));
+		uint256 initialBNBBalance = address(this).balance;
+		uint8 totalFeePrior = _totalFee;
+
+		uint256 amountToLiquify = contractBalance * _liquidityFee / _totalFee / 2;
+        uint256 amountForRewards = contractBalance * _rewardsFee / _totalFee;
+		uint256 amountToSwap = contractBalance - (amountToLiquify + amountForRewards);
+
+		_swapTokensForBNB(amountToSwap);
+
+		uint256 BNBBalanceAfterSwap = address(this).balance - initialBNBBalance;
+		uint256 totalBNBFee = _totalFee - (_liquidityFee / 2) - _rewardsFee;
+		uint256 amountBNBLiquidity = BNBBalanceAfterSwap * _liquidityFee / totalBNBFee / 2;
+        uint256 amountBNBDev = BNBBalanceAfterSwap * _devFee / totalBNBFee;
+		uint256 amountBNBSalary = BNBBalanceAfterSwap * _salaryFee / totalBNBFee;
+		uint256 amountBNBMarketing = BNBBalanceAfterSwap * _marketingFee / totalBNBFee;
+		uint256 amountBNBReserve = BNBBalanceAfterSwap - (amountBNBLiquidity + amountBNBDev + amountBNBSalary + amountBNBMarketing);
+
+        // Transfer for BNB development
+        payable(devWallet).transfer(amountBNBDev);
+
+		_swapBNBForCustomToken(amountBNBSalary, BUSD, salaryWallet);
+		_swapBNBForCustomToken(amountBNBMarketing, BUSD, marketingWallet);
+		_swapBNBForCustomToken(amountBNBReserve, BUSD, reserveWallet);
+
+        // Transfer for CMT rewards
+        (bool success) = IERC20(address(this)).transfer(address(rewardsWallet), amountForRewards);
+        require(success);
+
+        if (amountToLiquify > 0) {
+			_addLiquidity(amountToLiquify, amountBNBLiquidity);
+			emit SwapAndLiquify(amountToSwap, amountBNBLiquidity, amountToLiquify);
+        }
+
+		_totalFee = totalFeePrior;
+	}
+    function _swapBNBForCustomToken(uint256 bnbAmount, address token, address wallet) private {
+        address[] memory path = new address[](2);
+		path[0] = uniswapV2Router.WETH();
+		path[1] = token;
+		uniswapV2Router.swapExactETHForTokensSupportingFeeOnTransferTokens{value : bnbAmount}(
+			0, // accept any amount of ETH
+			path,
+			wallet,
+			block.timestamp
+		);
+    }
+	function _swapTokensForBNB(uint256 tokenAmount) private {
+		address[] memory path = new address[](2);
+		path[0] = address(this);
+		path[1] = uniswapV2Router.WETH();
+		_approve(address(this), address(uniswapV2Router), tokenAmount);
+		uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
+			tokenAmount,
+			0, // accept any amount of ETH
+			path,
+			address(this),
+			block.timestamp
+		);
+	}
+	function _addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
+		_approve(address(this), address(uniswapV2Router), tokenAmount);
+		uniswapV2Router.addLiquidityETH{value: ethAmount}(
+			address(this),
+			tokenAmount,
+			0, // slippage is unavoidable
+			0, // slippage is unavoidable
+			liquidityWallet,
+			block.timestamp
+		);
+	}
+}

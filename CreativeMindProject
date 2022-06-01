@@ -302,12 +302,12 @@ contract ERC20 is Context, IERC20, IERC20Metadata {
 	) internal virtual {}
 }
 
-contract CreativeMindToken is ERC20, Ownable {
+contract CreativeMindProjectToken is ERC20, Ownable {
 	IRouter public uniswapV2Router;
 	address public immutable uniswapV2Pair;
 
-	string private constant _name = "Creative Mind Token";
-	string private constant _symbol = "CMT";
+	string private constant _name = "Creative Mind Project";
+	string private constant _symbol = "CMP";
 	uint8 private constant _decimals = 18;
 
 	bool public isTradingEnabled;
